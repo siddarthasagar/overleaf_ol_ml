@@ -179,7 +179,7 @@ Table~\ref{tab:part1} summarizes the 10-seed average F1 scores for each RO metho
         \includegraphics[width=\linewidth]{figures/ro_progress_wine_seed.png}
         \caption{Wine convergence}
     \end{subfigure}
-    \caption{Part 1: RO convergence trajectories (val loss vs function evaluations, mean $\pm$ std across 10 seeds). \textbf{Takeaway:} On Adult, SA consistently reaches the lowest plateau, while RHC exhibits periodic loss spikes at restart boundaries. On Wine, GA achieves the best final val loss --- confirming the EDA prediction that population-based search advantages single-state methods on overlapping-class loss surfaces.}
+    \caption{Part 1: RO convergence trajectories (val loss vs function evaluations, mean $\pm$ std across 10 seeds). \textbf{Takeaway:} On Adult, GA achieves the lowest val-loss plateau, while SA (green) remains flat --- yet SA achieves the best test F1 (Table~\ref{tab:part1}), suggesting its stochastic acceptance prevents over-optimization to the validation set. On Wine, GA achieves the best final val loss --- confirming the EDA prediction that population-based search advantages single-state methods on overlapping-class loss surfaces.}
     \label{fig:ro_progress}
 \end{figure}
 \FloatBarrier
@@ -216,7 +216,7 @@ Table~\ref{tab:part2} shows the Adult F1 and convergence statistics (all 10-seed
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\columnwidth]{figures/part2_compute_curves_seed.png}
-    \caption{Part 2: Optimizer convergence curves on Adult (median $\pm$ IQR across 10 seeds). \textbf{Takeaway:} Adam-family methods reach the validation loss threshold (0.32) within the first 500 gradient steps, while SGD-based methods require 3,000--4,000 steps. The left panel shows that adaptive optimizers converge much faster in terms of gradient evaluations. The right panel confirms this advantage persists when measured by wall-clock time, with Adam reaching convergence in $\sim$0.2s compared to $\sim$1.5--1.7s for momentum-based SGD variants.}
+    \caption{Part 2: Optimizer convergence curves on Adult (median $\pm$ IQR across 10 seeds). \textbf{Takeaway:} Adam-family methods reach the validation loss threshold (0.32) within the first 500 gradient steps, while SGD-based methods require 3,000--4,000 steps. The left panel shows that adaptive optimizers converge much faster in terms of gradient evaluations. The right panel confirms this advantage persists when measured by wall-clock time, with Adam reaching convergence in $\sim$0.2s compared to $\sim$0.3s for momentum-based SGD variants and $\sim$1.8s for plain SGD.}
     \label{fig:part2_compute}
 \end{figure}
 
