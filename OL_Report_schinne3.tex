@@ -231,7 +231,7 @@ Table~\ref{tab:part2} shows the Adult F1 and convergence statistics (all 10-seed
         \includegraphics[width=\linewidth]{figures/part2_sensitivity_beta2.png}
         \caption{$\alpha$ vs $\beta_2$ sensitivity}
     \end{subfigure}
-    \caption{Part 2: Adam (baseline) sensitivity heatmaps over $\alpha$ and momentum parameters (Adult). \textbf{Takeaway:} Val loss is far more sensitive to $\alpha$ than to $\beta_1$ or $\beta_2$ --- high $\alpha$ (2 $\times$ 10$^{-3}$) causes instability (darker cells), while performance is stable across all $\beta_1$ and $\beta_2$ values at $\alpha = 10^{-3}$. The $\beta_2$ surface is notably flatter than $\beta_1$, confirming the second-moment estimator is less critical than step size for this tabular task.}
+    \caption{Part 2: Adam (baseline) sensitivity heatmaps over $\alpha$ and momentum parameters (Adult). \textbf{Takeaway:} Val loss is far more sensitive to $\alpha$ than to $\beta_1$ or $\beta_2$ --- high $\alpha$ (2 $\times$ 10$^{-3}$) causes instability (lighter/yellow cells), while performance is stable across all $\beta_1$ and $\beta_2$ values at $\alpha = 10^{-3}$. The $\beta_2$ surface is notably flatter than $\beta_1$, confirming the second-moment estimator is less critical than step size for this tabular task.}
     \label{fig:part2_sensitivity}
 \end{figure}
 \FloatBarrier
