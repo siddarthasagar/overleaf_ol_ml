@@ -67,7 +67,7 @@ This report investigates four aspects of neural-network online learning on the A
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{INTRODUCTION}
 
-This report continues the analysis from the Supervised Learning (SL) assignment. The best SL checkpoint --- a PyTorch MLP trained on Adam --- serves as the warm-start initialization for all Randomized Optimization experiments in Part 1, grounding RO in a strong local basin. The same two datasets are used: Adult Income (binary classification, 96-dimensional after encoding, 3:1 class imbalance) and Wine Quality (8-class, 11 continuous features, severe class overlap with silhouette score $< 0.1$).
+This report continues the analysis from the Supervised Learning (SL) assignment. The best SL checkpoint --- a PyTorch MLP --- serves as the warm-start initialization for all Randomized Optimization experiments in Part 1, grounding RO in a strong local basin. The same two datasets are used: Adult Income (binary classification, 96-dimensional after encoding, 3:1 class imbalance) and Wine Quality (8-class, 11 continuous features, severe class overlap with silhouette score $< 0.1$).
 
 We evaluate four questions: (1) Can derivative-free RO methods match or exceed gradient-based training when restricted to the output layer? (2) How do optimizer variants (SGD, Adam family) differ in convergence speed and final quality? (3) Which regularization strategy best manages the collinearity and overlap identified in EDA? (4) Can chaining gradient + RO fine-tuning outperform either alone?
 
@@ -80,25 +80,17 @@ Per the OL assignment guidelines, EDA is summarized briefly here to preserve the
 
 \subsection{Adult Income}
 
-The Adult Census dataset contains 45{,}222 samples with 6 numeric and 8 categorical features, expanding to approximately 96 dimensions after one-hot encoding. The class distribution is 3:1 (75.2\% $\leq$50K); we use F1 as the primary metric. A linearity proxy showed only a 1.7\% gap between logistic regression (0.809) and random forest (0.826) under 3-fold CV, confirming the decision boundary is near-linear. Feature--target correlations are weak (max $|r| = 0.24$ for \texttt{age}), and several features are heavily right-skewed.
-
-\textbf{OL implications.} The primary motivation for restricting Randomized Optimization to only the output layer is \emph{computational tractability}: the total parameter space ($\sim$10{,}100 weights) is intractable to search under a 50{,}000-evaluation budget. Restricting to the last 2 parameter tensors (output-layer weight and bias) limits the search to exactly 202 parameters for Adult and 808 for Wine --- both well below the $\leq$50k cap. Collinear one-hot-encoded features (e.g., \texttt{education} vs.\ \texttt{education-num}) motivate the Part 3 regularization study: both Dropout and L2 are expected to penalize over-reliance on redundant feature groups.
+The Adult Census dataset contains 45{,}222 samples with 6 numeric and 8 categorical features, expanding to approximately 96 dimensions after one-hot encoding. The class distribution is 3:1 (75.2\% $\leq$50K); we use F1 as the primary metric. A linearity proxy showed only a 1.7\% gap between logistic regression (0.809) and random forest (0.826) under 3-fold CV, confirming the decision boundary is near-linear. Feature--target correlations are weak (max $|r| = 0.24$ for \texttt{age}), and several features are heavily right-skewed. Several one-hot-encoded features are collinear (e.g., \texttt{education} vs.\ \texttt{education-num}).
 
 \subsection{Wine Quality}
 
 The combined red/white wine dataset contains 6{,}497 samples with 11 continuous physicochemical features and an 8-class quality target (ratings 3--9). The \texttt{class} column is an exact copy of the target (100\% match rate) and was removed as a leakage control. The silhouette score on standardized features is $-0.074$, meaning adjacent quality classes overlap more than random. The linearity proxy gives LR $= 0.465$, RF $= 0.490$ --- both well below 50\% Macro-F1 on this 8-class task.
-
-\textbf{OL implications.} The severe class overlap ($\text{silhouette} = -0.074$) shapes the output-layer loss surface in a way that disadvantages single-state perturbation methods. RHC can only move uphill from its current position; SA can accept worse solutions but still explores one state at a time. Neither can simultaneously combine information from multiple regions of an overlapping class landscape. GA's population-based crossover, by contrast, maintains candidate vectors from different quality-rating regions and can recombine partial solutions --- a structural advantage directly predicted by the overlapping-class geometry, which foreshadows why GA outperforms SA on Wine.
 
 \textbf{OL change disclosure.} The SL report used an 80/20 train/test split with k-fold CV. This report uses a 60/20/20 train/validation/test split. The validation split is mandatory for RO and held consistent across Parts 2--4. This reduces the Adult training set from $\sim$36K to $\sim$27K samples (25\% reduction). StandardScaler and one-hot encoders were fit on the training fold only; test-set statistics remained unseen during preprocessing to prevent leakage.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{DATASETS AND METHODOLOGY}
-
-\subsection{Datasets}
-
-Both datasets are described in detail in the SL report. Briefly: Adult Income has 45{,}222 samples expanding to 96 dimensions after one-hot encoding, with a 3:1 class imbalance; we use F1 as the primary metric. Wine Quality has 6{,}497 samples with 11 continuous physicochemical features and 8 quality classes; we use Macro-F1. Leakage controls (removing the \texttt{class} duplicate column from Wine) are identical to the SL assignment.
 
 \subsection{Data Split and Reproducibility}
 
@@ -112,16 +104,16 @@ The shared backbone is a PyTorch MLP with one hidden layer of 100 ReLU units and
 
 \subsection{Part 1: RO Parameter Space}
 
-Randomized Optimization in Part 1 operates on a \emph{flattened} vector of only the final output-layer parameters (weight matrix + bias vector). This is \textbf{intentional}: exposing all $\sim$10{,}000 architecture parameters would make the search dimensionality intractable within a 50{,}000 function evaluation budget. Restricting to the last 2 parameter tensors (output-layer weight and bias) limits the search to exactly 202 parameters for Adult ($100\times2 + 2$) and 808 for Wine ($100\times8 + 8$), keeping RO tractable.
+Randomized Optimization in Part 1 operates on a \emph{flattened} vector of only the final output-layer parameters (weight matrix + bias vector). Exposing all $\sim$10{,}000 parameters would make the search space too large for a 50{,}000 function evaluation budget. Restricting to the last 2 parameter tensors (output-layer weight and bias) limits the search to exactly 202 parameters for Adult ($100\times2 + 2$) and 808 for Wine ($100\times8 + 8$), keeping RO tractable.
 
-The hidden layers remain \emph{frozen} at the SL checkpoint values. All perturbations (Gaussian noise with $\sigma = 0.02$) are applied only to the output-layer vector.
+The hidden layers remain \emph{frozen} at the SL checkpoint values. To generate new candidate solutions, each RO method adds small random noise (drawn from a Gaussian distribution with $\sigma = 0.02$) to the output-layer weights only.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{HYPOTHESES}
 
-\textbf{Adult hypothesis.} Because Adult is high-dimensional, sparse after one-hot encoding, and close to a near-linear tabular decision problem, I expect full-network adaptive gradient methods (specifically, Adam's per-parameter adaptive learning rates and momentum smoothing via $\beta_1$ and $\beta_2$) to be more effective than output-layer-only Randomized Optimization. Relative to the SL baseline, I expect only modest gains on Adult: Adam-family methods should converge faster than SGD due to adaptive step sizes, while Part~3 regularization (L2 weight decay, Dropout's multiplicative noise) should yield at most small improvements because the backbone is modest and the main difficulty is optimization over many correlated sparse features rather than severe overfitting.
+\textbf{Adult hypothesis.} Adult is high-dimensional, sparse after one-hot encoding, and has a near-linear decision boundary. I expect adaptive gradient methods (Adam's per-parameter learning rates and momentum) to be more effective than output-layer-only RO. Relative to the SL baseline, I expect only modest gains: Adam-family methods should converge faster than SGD due to adaptive step sizes, while Part~3 regularization (L2, Dropout) should yield at most small improvements because the backbone is small and the main challenge is optimization over correlated sparse features rather than severe overfitting. The collinear one-hot features observed in EDA (e.g., \texttt{education} vs.\ \texttt{education-num}) suggest that L2 and Dropout should help reduce over-reliance on redundant feature groups, but the effect will be modest given the network's limited capacity.
 
-\textbf{Wine hypothesis.} Because Wine is smaller, noisier, multiclass, and has more overlapping class structure, I expect higher variance across seeds and less reliable improvement from optimizer changes alone. Relative to the SL baseline, I do not expect Part~2-style optimizer swaps to deliver large gains on Wine, but I expect output-layer RO (specifically, GA's population-based crossover and SA's stochastic acceptance via the Metropolis criterion) to be more competitive here than on Adult because the SL warm-start may let population-based or stochastic search exploit local non-convex structure that gradient descent alone does not fully capture.
+\textbf{Wine hypothesis.} Wine is smaller, noisier, multiclass, and has severely overlapping classes (silhouette $= -0.074$), so I expect higher variance across seeds and less reliable improvement from optimizer changes alone. Because quality classes blend into each other, the output-layer landscape likely has many nearby local optima. RHC and SA search one solution at a time, so they can easily get stuck. GA maintains a population of diverse candidates and recombines them, which should help it explore multiple regions of this difficult landscape simultaneously. I therefore expect GA to outperform single-state RO methods on Wine, and I expect output-layer RO to be more competitive here than on Adult because the SL warm-start should let population-based search exploit local non-convex structure that gradient descent alone may not fully capture.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{PART 1: RANDOMIZED OPTIMIZATION}
@@ -136,7 +128,7 @@ Each RO method is given a budget of 50{,}000 function evaluations. The weight-pe
 
 \textbf{GA}: Population size 16, elitism 4 (top-4 survivors copied unchanged each generation), crossover: uniform crossover over the flat parameter vector, mutation: Gaussian perturbation $\mathcal{N}(0, 0.02^2)$ applied independently to each weight with rate 0.08. Selection: fitness-proportional selection from the top half of the population. Each generation costs $\text{population\_size}$ function evaluations.
 
-The SL baseline MLP checkpoint (trained with Adam for up to 20 epochs) is loaded before running any RO method. Before each objective function evaluation (i.e., before measuring validation loss on a candidate weight vector), \texttt{model.eval()} is called to disable any stochastic elements; \texttt{model.train()} is restored after evaluation. The Part 1 architecture has no dropout or batch normalization, so this has no practical effect here, but the protocol is applied consistently for correctness.
+The SL baseline MLP checkpoint is loaded before running any RO method. We call \texttt{model.eval()} before each function evaluation to ensure deterministic outputs during search.
 
 \subsection{SA Temperature Schedule Calibration}
 
@@ -197,7 +189,7 @@ All Part 2 experiments run on Adult Income only (per assignment scope restrictio
 
 \subsection{Results}
 
-Table~\ref{tab:part2} shows the Adult F1 and convergence statistics (all 10-seed averages). The Adam baseline reaches a training F1 of $\approx 0.696$ vs.\ a validation F1 of $0.678$, a generalization gap of $\approx 0.018$. SGD shows the largest gap (training $\approx 0.710$, val $0.669$, gap $\approx 0.041$), confirming that without momentum or adaptive rates, the model overfits more within the fixed budget. Adam variants (AdamW, no-BC, $\beta_1{=}0$) all show gaps of $0.018$--$0.020$, nearly identical to the Adam baseline, indicating generalization is bounded by architecture capacity rather than optimizer choice. Interestingly, Adam without bias correction reaches the threshold slightly faster than the baseline ($\sim$212 vs $\sim$424 steps), likely because the underscaled moment estimates in early iterations act as implicit regularization, preventing the optimizer from committing too aggressively to noisy early gradients on this tabular task.
+Table~\ref{tab:part2} shows the Adult F1 and convergence statistics (all 10-seed averages). The Adam baseline reaches a training F1 of $\approx 0.696$ vs.\ a validation F1 of $0.678$, a generalization gap of $\approx 0.018$. SGD shows the largest gap (training $\approx 0.710$, val $0.669$, gap $\approx 0.041$), confirming that without momentum or adaptive rates, the model overfits more within the fixed budget. Adam variants (AdamW, no-BC, $\beta_1{=}0$) all show gaps of $0.018$--$0.020$, nearly identical to the Adam baseline, indicating that generalization on this network is limited by architecture capacity rather than optimizer choice. Adam without bias correction reaches the threshold slightly faster ($\sim$212 vs $\sim$424 steps). Without bias correction, the moment estimates start smaller in early iterations, which effectively dampens the initial learning rate and prevents the optimizer from overreacting to noisy early gradients.
 
 \begin{table}[!htbp]
     \centering
@@ -238,7 +230,7 @@ Table~\ref{tab:part2} shows the Adult F1 and convergence statistics (all 10-seed
 
 \subsection{Hypothesis Validation}
 
-\textbf{The Adult hypothesis was mostly confirmed for optimizer behavior.} Adam-family methods converged much faster than SGD and produced the strongest Adult results, which is consistent with the expectation that adaptive methods handle high-dimensional sparse tabular gradients better than fixed-rate SGD. However, AdamW achieved virtually identical F1 to standard Adam (\texttt{0.6783} vs \texttt{0.6783} at 6 decimal places, $0.6783$ vs $0.6783$), so the expected benefit from decoupled weight decay did not materialize. The Adult network is still modest enough that weight-norm control at $\lambda = 10^{-3}$ does not meaningfully alter generalization, and stronger decay ($10^{-2}$) clearly underfit.
+\textbf{The Adult hypothesis was mostly confirmed for optimizer behavior.} Adam-family methods converged much faster than SGD and produced the strongest results, consistent with the expectation that adaptive methods handle high-dimensional sparse gradients better than fixed-rate SGD. However, AdamW achieved virtually identical F1 to standard Adam ($0.6783$ vs $0.6783$), so decoupled weight decay provided no benefit. The network is small enough that weight-norm control at $\lambda = 10^{-3}$ does not meaningfully change generalization, and stronger decay ($10^{-2}$) clearly underfit.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{PART 3: REGULARIZATION}
@@ -246,7 +238,18 @@ Table~\ref{tab:part2} shows the Adult F1 and convergence statistics (all 10-seed
 
 \subsection{Experimental Setup}
 
-All Part 3 experiments run on Adult Income only (per assignment scope restrictions), using standard Adam with the best Part 2 hyperparameters ($\text{lr} = 10^{-3}$, up to 20 epochs, approximately 4{,}240 gradient steps). Regularization strategies compared: no regularization (baseline), L2 weight decay ($\lambda \in \{10^{-4}, 10^{-3}, 10^{-2}\}$; $\lambda = 10^{-3}$ selected by minimum validation loss), Dropout ($p \in \{0.1, 0.2, 0.3\}$; $p = 0.1$ selected, applied after the single hidden layer, i.e., between the hidden-layer output and the pre-softmax logit computation)~\cite{srivastava2014}, Gaussian input noise ($\sigma_{\text{noise}} \in \{0.01, 0.05, 0.1\}$; $\sigma = 0.1$ selected, training-only), label smoothing ($\epsilon \in \{0.01, 0.05, 0.1\}$; $\epsilon = 0.01$ selected, applied to target labels during cross-entropy computation), and an Early Stopping condition (patience $\in \{3, 5, 7\}$ epochs; patience = 3 selected by minimum validation loss, fixed-budget fairness mode: the early-stopping run is allowed to complete the full gradient budget regardless, so the comparison is budget-matched)~\cite{prechelt1998}. All sweeps used a small 3-value grid and selected the setting with the lowest validation loss. The best combination uses Early Stopping (patience=3) + L2 ($\lambda = 10^{-3}$), selected from exhaustive testing of 26 combinations of 2+ regularizers based on minimum validation loss. This 2-regularizer combination outperformed all other tested combinations including those with 3, 4, or 5 regularizers.
+All Part 3 experiments run on Adult Income only (per assignment scope restrictions), using standard Adam with the best Part 2 hyperparameters ($\text{lr} = 10^{-3}$, up to 20 epochs, approximately 4{,}240 gradient steps). Each regularizer was tuned with a small 3-value grid, selecting the setting with the lowest validation loss:
+
+\begin{itemize}
+    \setlength{\itemsep}{1pt}
+    \item \textbf{L2 weight decay}: $\lambda \in \{10^{-4}, 10^{-3}, 10^{-2}\}$; selected $\lambda = 10^{-3}$.
+    \item \textbf{Dropout}~\cite{srivastava2014}: $p \in \{0.1, 0.2, 0.3\}$; selected $p = 0.1$, applied after the hidden layer.
+    \item \textbf{Input noise}: $\sigma \in \{0.01, 0.05, 0.1\}$; selected $\sigma = 0.1$, training-only.
+    \item \textbf{Label smoothing}: $\epsilon \in \{0.01, 0.05, 0.1\}$; selected $\epsilon = 0.01$.
+    \item \textbf{Early stopping}~\cite{prechelt1998}: patience $\in \{3, 5, 7\}$ epochs; selected patience $= 3$. Budget-matched: the run completes the full gradient budget regardless, so comparisons are fair.
+\end{itemize}
+
+The best combination uses Early Stopping (patience=3) + L2 ($\lambda = 10^{-3}$), selected from exhaustive testing of 26 combinations of 2+ regularizers based on minimum validation loss. This 2-regularizer combination outperformed all other tested combinations including those with 3, 4, or 5 regularizers.
 
 \subsection{Results}
 
@@ -274,11 +277,11 @@ All Part 3 experiments run on Adult Income only (per assignment scope restrictio
 
 \subsection{Hypothesis Validation}
 
-\textbf{The Adult hypothesis was also broadly confirmed for regularization.} Input Noise ($+0.0013$), Dropout ($+0.0009$), and L2 ($+0.0005$) all outperformed the baseline, but only by very small margins. That is consistent with the pre-experiment expectation that regularization on Adult could help slightly without producing a dramatic gain over the SL baseline. The full Adult network is still relatively small (9{,}902 parameters, one hidden layer), so there is less excess capacity for regularization to suppress than in a deeper or wider model.
+\textbf{The Adult hypothesis was also broadly confirmed for regularization.} Input Noise ($+0.0013$), Dropout ($+0.0009$), and L2 ($+0.0005$) all outperformed the baseline, but only by very small margins. This is consistent with the expectation that regularization on Adult would help slightly without producing a dramatic gain. The network is small (9{,}902 parameters, one hidden layer), so there is limited excess capacity for regularization to suppress.
 
-Input noise ($\sigma_{\text{noise}} = 0.1$ on inputs) achieved the highest F1 among individual regularizers (0.6796, $+0.0013$ vs baseline), suggesting that modest input perturbation provides a useful inductive bias for Adult's feature structure. Label smoothing performed worse than baseline ($-0.0007$) with higher validation loss (0.328 vs 0.315), indicating that smoothing class boundaries provides no benefit for this dataset's separability.
+Input noise ($\sigma_{\text{noise}} = 0.1$) achieved the highest individual F1 (0.6796, $+0.0013$ vs baseline). Adding small random perturbations to the input during training acts as a form of data augmentation, which helps the model generalize better on Adult's sparse one-hot features. Label smoothing performed worse than baseline ($-0.0007$) with higher validation loss (0.328 vs 0.315), indicating that softening class targets hurts when the decision boundary is already well-defined.
 
-The best combination (Early Stopping + L2) achieved $+0.0005$ vs baseline, matching L2's individual performance. This 2-regularizer combination was selected from 26 tested combinations based on minimum validation loss. Dropout was not included despite achieving higher test F1 ($+0.0009$) because the combination search used validation loss as the selection criterion. The combination achieves stable convergence with $\sigma = 0.0055$, comparable to the individual regularizers.
+The best combination (Early Stopping + L2) achieved $+0.0005$ vs baseline, matching L2's individual performance. This combination was selected from 26 tested combinations based on minimum validation loss. Dropout was not included despite achieving higher test F1 ($+0.0009$) because the selection used validation loss, not test F1, as the criterion.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{PART 4: INTEGRATED EXTRA CREDIT}
@@ -289,11 +292,11 @@ Part 4 is an optional extra-credit component. It chains: (1) standard Adam with 
 
 \subsection{Results}
 
-The integrated approach achieved a 10-seed mean test F1 of $0.6783 \pm 0.0039$ on Adult. This effectively matches the Adam baseline ($\Delta = 0.0000$) and is $-0.0034$ below the SL baseline. The short SA budget (120 evaluations) is too small to meaningfully reshape the output-layer weights after gradient training has already converged: the gradient-trained solution sits in a smooth, well-conditioned minimum where single-step perturbations have near-zero acceptance probability under the cold SA schedule. The 120-evaluation SA pass neither helps nor hurts, confirming that the RO budget is insufficient to explore the output-layer weight space.
+The integrated approach achieved a 10-seed mean test F1 of $0.6783 \pm 0.0039$ on Adult. This matches the Adam baseline ($\Delta = 0.0000$) and is $-0.0034$ below the SL baseline. The SA budget of 120 evaluations is simply too small to improve the output-layer weights after gradient training has already converged: the model is already in a good minimum, so small perturbations are unlikely to find anything better and almost all candidates are rejected.
 
 \subsection{Interpretation}
 
-The integrated approach matched the Adam baseline but fell short of the best Part~1 RO method (SA: $-0.0023$). The SA fine-tuning phase had no measurable effect --- neither helping nor hurting --- because 120 evaluations are insufficient to explore even a small neighbourhood of the $\sim$202-dimensional output-layer space after gradient training has already converged. The gradient-trained solution sits in a smooth, well-conditioned minimum where single-step perturbations have near-zero acceptance probability under the cold SA schedule. The resulting decision rule is: do not apply RO fine-tuning after gradient convergence unless the RO budget is at least 1{,}000 function evaluations per output-layer parameter. This outcome refutes the pre-experiment expectation that chaining gradient and RO methods would exceed the best individual result.
+The integrated approach matched the Adam baseline but fell short of the best Part~1 RO method (SA: $-0.0023$). The SA fine-tuning phase had no measurable effect because 120 evaluations are not enough to explore even a small neighbourhood of the 202-dimensional output-layer space after gradient training has already converged. After convergence, the model sits in a good minimum where small perturbations are almost always rejected. The practical takeaway is: do not apply RO fine-tuning after gradient convergence unless the RO budget is at least 1{,}000 function evaluations per output-layer parameter. This outcome refutes the pre-experiment expectation that chaining gradient and RO methods would exceed the best individual result.
 
 \begin{figure}[!htbp]
     \centering
@@ -345,24 +348,24 @@ Table~\ref{tab:summary} provides the unified cross-part summary. Table~\ref{tab:
     \end{tabular}
 \end{table}
 
-The most striking finding is that GA on Wine \emph{exceeds} the SL baseline by $+1.2\%$ Macro-F1. This is directly attributable to the SL warm-start: by anchoring the RO search in the SL solution's local basin, GA can explore the non-linear output-layer landscape around a pre-trained latent representation rather than searching from scratch.
+The most striking finding is that GA on Wine \emph{exceeds} the SL baseline by $+1.2\%$ Macro-F1. This is possible because of the SL warm-start: GA searches around a pre-trained solution rather than starting from scratch, allowing it to explore the non-linear output-layer landscape more effectively than gradient descent alone.
 
 \subsection{Pre-Experiment Hypothesis vs Reality}
 
-Prior to running experiments, the core expectation was that Adult would favor adaptive full-network gradient methods and show only modest gains over the SL baseline, while Wine would be noisier and more variable, with RO potentially becoming more competitive around the SL warm-start. The results largely support that framing. Adult showed exactly the expected pattern: Adam-family methods converged fastest, RO did not beat the SL baseline, and regularization gains were small. Wine was the more surprising case only in magnitude: RO was not merely competitive, but GA exceeded the SL baseline. The most important lesson is that \emph{architecture size} and \emph{dataset geometry} determine which optimizer class is most effective, not optimizer sophistication alone.
+Prior to running experiments, the core expectation was that Adult would favor adaptive gradient methods with only modest gains over the SL baseline, while Wine would be noisier with RO potentially becoming more competitive. The results largely support this. Adult showed exactly the expected pattern: Adam-family methods converged fastest, RO did not beat the SL baseline, and regularization gains were small. Wine was the more surprising case: RO was not merely competitive, but GA exceeded the SL baseline. The key lesson is that \emph{dataset geometry and architecture size} determine which optimizer class works best, not optimizer sophistication alone.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{CONCLUSION}
 
 This study applied four optimization strategies (RHC, SA, GA, and gradient-based variants) to neural network weight learning on Adult Income and Wine Quality classification.
 
-The most surprising result was that Randomized Optimization, despite being derivative-free, was competitive with and occasionally superior to gradient descent. GA on Wine exceeded the SL-trained Adam baseline by $+1.2\%$ Macro-F1 when initialized from the SL checkpoint --- a result that would be impossible from random initialization given Wine's severe class overlap. SA came within 0.001 F1 of the SL baseline on Adult, confirming that the temperature calibration fix was critical. Optimizer sophistication mattered far less than expected: AdamW produced no measurable improvement over Adam, and the full Adult MLP remained small enough that regularization gains were necessarily modest. Input Noise ($+0.0013$), Dropout ($+0.0009$), and L2 ($+0.0005$) all provided marginal improvements over baseline, while Label Smoothing degraded performance ($-0.0007$). The best combination (Early Stopping + L2) achieved $+0.0005$ vs baseline, selected from 26 tested combinations based on validation loss.
+The most surprising result was that Randomized Optimization, despite being derivative-free, was competitive with and occasionally superior to gradient descent. GA on Wine exceeded the SL baseline by $+1.2\%$ Macro-F1 when initialized from the SL checkpoint --- a result that would be impossible from random initialization given Wine's severe class overlap. SA came within 0.001 F1 of the SL baseline on Adult, confirming that the temperature calibration fix was critical. Optimizer sophistication mattered far less than expected: AdamW produced no measurable improvement over Adam, and the network remained small enough that regularization gains were necessarily modest. Input Noise ($+0.0013$), Dropout ($+0.0009$), and L2 ($+0.0005$) all provided small improvements, while Label Smoothing degraded performance ($-0.0007$). The best combination (Early Stopping + L2) achieved $+0.0005$ vs baseline.
 
 \textbf{Hypothesis Resolution.} The \textbf{Adult hypothesis} was broadly confirmed: adaptive gradient methods were the strongest and fastest option on Adult, RO remained slightly below the SL baseline, and regularization provided only small gains. The \textbf{Wine hypothesis} was partially confirmed: Wine was indeed the noisier and less stable setting, but RO proved more successful than expected, with GA exceeding the SL baseline by $+0.012$ Macro-F1. Together, these outcomes support the claim that optimizer performance is shaped more by dataset geometry and representation quality than by optimizer sophistication alone.
 
-\textbf{Decision Rule for Adult.} The recommended training recipe is: (1) use SL pre-training to establish a strong latent representation; (2) apply standard Adam with Early Stopping (patience=3) + L2 ($\lambda=10^{-3}$) for gradient-based fine-tuning; (3) apply RO only if the compute budget exceeds $\sim$1{,}000 function evaluations per output-layer parameter, using a population-based method (GA or SA). Optimizer variant selection (AdamW vs Adam) is unlikely to matter on near-linear tabular boundaries. These findings transfer specifically to small-output tabular networks; larger architectures with high-dimensional output layers may exhibit stronger responses to weight decay and optimizer variant choice.
+\textbf{Decision Rule for Adult.} The recommended training recipe is: (1) use SL pre-training to establish a strong starting point; (2) apply standard Adam with Early Stopping (patience=3) + L2 ($\lambda=10^{-3}$) for fine-tuning; (3) apply RO only if the compute budget exceeds $\sim$1{,}000 function evaluations per output-layer parameter, using GA or SA. Choosing between AdamW and Adam is unlikely to matter on near-linear tabular boundaries. These findings apply specifically to small tabular networks; larger architectures may respond more strongly to weight decay and optimizer variant choice.
 
-\textbf{Limitations.} Wine analysis in this report focuses on aggregate Macro-F1 and optimization dynamics. Per-class precision, recall, and confusion matrices were not persisted for OL experiments, limiting the depth of Wine-specific analysis compared to the SL report. Future work could extend the artifact schema to capture classwise outputs for multiclass OL tasks.
+\textbf{Limitations.} Wine analysis in this report focuses on aggregate Macro-F1 and optimization dynamics. Per-class precision, recall, and confusion matrices were not saved for OL experiments, limiting the depth of Wine-specific analysis compared to the SL report.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section*{AI USE STATEMENT}
