@@ -80,13 +80,13 @@ Per the OL assignment guidelines, EDA is summarized briefly here to preserve the
 
 \subsection{Adult Income}
 
-The Adult Census dataset~\cite{kohavi1996} contains 45{,}222 samples with 6 numeric and 8 categorical features, expanding to approximately 96 dimensions after one-hot encoding. The class distribution is 3:1 (75.2\% $\leq$50K); we use F1 as the primary metric. A linearity proxy showed only a 1.7\% gap between logistic regression (0.809) and random forest (0.826) under 3-fold CV, confirming the decision boundary is near-linear. Feature--target correlations are weak (max $|r| = 0.24$ for \texttt{age}), and several features are heavily right-skewed.
+The Adult Census dataset contains 45{,}222 samples with 6 numeric and 8 categorical features, expanding to approximately 96 dimensions after one-hot encoding. The class distribution is 3:1 (75.2\% $\leq$50K); we use F1 as the primary metric. A linearity proxy showed only a 1.7\% gap between logistic regression (0.809) and random forest (0.826) under 3-fold CV, confirming the decision boundary is near-linear. Feature--target correlations are weak (max $|r| = 0.24$ for \texttt{age}), and several features are heavily right-skewed.
 
-\textbf{OL implications.} The primary motivation for restricting Randomized Optimization to only the output layer is \emph{computational tractability}: the total parameter space ($\sim$10{,}100 weights) is intractable to search under a 50{,}000-evaluation budget. Restricting to 2 tensors (\texttt{PART1\_RO\_MAX\_TENSORS=2}) limits the search to exactly 202 parameters for Adult and 808 for Wine --- both well below the $\leq$50k cap. Collinear one-hot-encoded features (e.g., \texttt{education} vs.\ \texttt{education-num}) motivate the Part 3 regularization study: both Dropout and L2 are expected to penalize over-reliance on redundant feature groups.
+\textbf{OL implications.} The primary motivation for restricting Randomized Optimization to only the output layer is \emph{computational tractability}: the total parameter space ($\sim$10{,}100 weights) is intractable to search under a 50{,}000-evaluation budget. Restricting to the last 2 parameter tensors (output-layer weight and bias) limits the search to exactly 202 parameters for Adult and 808 for Wine --- both well below the $\leq$50k cap. Collinear one-hot-encoded features (e.g., \texttt{education} vs.\ \texttt{education-num}) motivate the Part 3 regularization study: both Dropout and L2 are expected to penalize over-reliance on redundant feature groups.
 
 \subsection{Wine Quality}
 
-The combined red/white wine dataset contains 6{,}497 samples with 11 continuous physicochemical features and an 8-class quality target (ratings 3--9). The \texttt{class} column is an exact copy of the target (100\% match rate) and was removed as a leakage control; the \texttt{type} indicator was also removed. The silhouette score on standardized features is $-0.074$, meaning adjacent quality classes overlap more than random. The linearity proxy gives LR $= 0.465$, RF $= 0.490$ --- both well below 50\% Macro-F1 on this 8-class task.
+The combined red/white wine dataset contains 6{,}497 samples with 11 continuous physicochemical features and an 8-class quality target (ratings 3--9). The \texttt{class} column is an exact copy of the target (100\% match rate) and was removed as a leakage control. The silhouette score on standardized features is $-0.074$, meaning adjacent quality classes overlap more than random. The linearity proxy gives LR $= 0.465$, RF $= 0.490$ --- both well below 50\% Macro-F1 on this 8-class task.
 
 \textbf{OL implications.} The severe class overlap ($\text{silhouette} = -0.074$) shapes the output-layer loss surface in a way that disadvantages single-state perturbation methods. RHC can only move uphill from its current position; SA can accept worse solutions but still explores one state at a time. Neither can simultaneously combine information from multiple regions of an overlapping class landscape. GA's population-based crossover, by contrast, maintains candidate vectors from different quality-rating regions and can recombine partial solutions --- a structural advantage directly predicted by the overlapping-class geometry, which foreshadows why GA outperforms SA on Wine.
 
@@ -112,7 +112,7 @@ The shared backbone is a PyTorch MLP with one hidden layer of 100 ReLU units and
 
 \subsection{Part 1: RO Parameter Space}
 
-Randomized Optimization in Part 1 operates on a \emph{flattened} vector of only the final output-layer parameters (weight matrix + bias vector). This is \textbf{intentional}: exposing all $\sim$10{,}000 architecture parameters would make the search dimensionality intractable within a 50{,}000 function evaluation budget. Restricting to 2 tensors (\texttt{PART1\_RO\_MAX\_TENSORS=2}) limits the search to exactly 202 parameters for Adult ($100\times2 + 2$) and 808 for Wine ($100\times8 + 8$), keeping RO tractable.
+Randomized Optimization in Part 1 operates on a \emph{flattened} vector of only the final output-layer parameters (weight matrix + bias vector). This is \textbf{intentional}: exposing all $\sim$10{,}000 architecture parameters would make the search dimensionality intractable within a 50{,}000 function evaluation budget. Restricting to the last 2 parameter tensors (output-layer weight and bias) limits the search to exactly 202 parameters for Adult ($100\times2 + 2$) and 808 for Wine ($100\times8 + 8$), keeping RO tractable.
 
 The hidden layers remain \emph{frozen} at the SL checkpoint values. All perturbations (Gaussian noise with $\sigma = 0.02$) are applied only to the output-layer vector.
 
@@ -193,7 +193,7 @@ Table~\ref{tab:part1} summarizes the 10-seed average F1 scores for each RO metho
 
 \subsection{Experimental Setup}
 
-All Part 2 experiments run on Adult Income only (per assignment scope restrictions). All methods train for up to 20 epochs (approximately 4{,}240 gradient steps on the 60/20/20 split). We define a fixed validation-loss threshold $\ell = 0.32$ for convergence speed analysis. Time and steps to reach $\ell$ are reported as a speed-to-target metric. Methods compared: SGD (no momentum), SGD + Momentum, Nesterov momentum, Adam (baseline), Adam with $\beta_1 = 0$ (RMSProp-like), Adam without bias correction, and AdamW ($\lambda = 10^{-3}$). All use $\text{lr} = 10^{-3}$. The sensitivity heatmaps (Fig.~\ref{fig:part2_sensitivity}) sweep $\alpha \in \{10^{-4}, 5 \times 10^{-4}, 10^{-3}, 2 \times 10^{-3}\}$ and $\beta_1 \in \{0.0, 0.5, 0.9, 0.95\}$ / $\beta_2 \in \{0.9, 0.99, 0.999, 0.9999\}$ for the Adam baseline variant, measuring validation loss after 12 epochs. Typical wall-clock time per method is $\sim$2\,s on a macOS arm64 system (10-core CPU, no GPU).
+All Part 2 experiments run on Adult Income only (per assignment scope restrictions). All methods train for up to 20 epochs (approximately 4{,}240 gradient steps on the 60/20/20 split). We define a fixed validation-loss threshold $\ell = 0.32$ for convergence speed analysis. Time and steps to reach $\ell$ are reported as a speed-to-target metric. Methods compared: SGD (no momentum), SGD + Momentum, Nesterov momentum, Adam (baseline)~\cite{kingma2014}, Adam with $\beta_1 = 0$ (RMSProp-like), Adam without bias correction, and AdamW ($\lambda = 10^{-3}$)~\cite{loshchilov2017}. All use $\text{lr} = 10^{-3}$. The sensitivity heatmaps (Fig.~\ref{fig:part2_sensitivity}) sweep $\alpha \in \{10^{-4}, 5 \times 10^{-4}, 10^{-3}, 2 \times 10^{-3}\}$ and $\beta_1 \in \{0.0, 0.5, 0.9, 0.95\}$ / $\beta_2 \in \{0.9, 0.99, 0.999, 0.9999\}$ for the Adam baseline variant, measuring validation loss after 12 epochs. Typical wall-clock time per method is $\sim$2\,s on a macOS arm64 system (10-core CPU, no GPU).
 
 \subsection{Results}
 
@@ -246,7 +246,7 @@ Table~\ref{tab:part2} shows the Adult F1 and convergence statistics (all 10-seed
 
 \subsection{Experimental Setup}
 
-All Part 3 experiments run on Adult Income only (per assignment scope restrictions), using standard Adam with the best Part 2 hyperparameters ($\text{lr} = 10^{-3}$, up to 20 epochs, approximately 4{,}240 gradient steps). Regularization strategies compared: no regularization (baseline), L2 weight decay ($\lambda = 10^{-3}$), Dropout ($p = 0.1$ applied after the single hidden layer, i.e., between the hidden-layer output and the pre-softmax logit computation), Gaussian input noise ($\sigma_{\text{noise}} = 0.1$, training-only), label smoothing ($\epsilon = 0.01$, applied to target labels during cross-entropy computation), and an Early Stopping condition (patience = 3 epochs, fixed-budget fairness mode: the early-stopping run is allowed to complete the full gradient budget regardless, so the comparison is budget-matched)~\cite{prechelt1998}. The best combination uses Early Stopping (patience=3) + L2 ($\lambda = 10^{-3}$), selected from exhaustive testing of 26 combinations of 2+ regularizers based on minimum validation loss. This 2-regularizer combination outperformed all other tested combinations including those with 3, 4, or 5 regularizers.
+All Part 3 experiments run on Adult Income only (per assignment scope restrictions), using standard Adam with the best Part 2 hyperparameters ($\text{lr} = 10^{-3}$, up to 20 epochs, approximately 4{,}240 gradient steps). Regularization strategies compared: no regularization (baseline), L2 weight decay ($\lambda \in \{10^{-4}, 10^{-3}, 10^{-2}\}$; $\lambda = 10^{-3}$ selected by minimum validation loss), Dropout ($p \in \{0.1, 0.2, 0.3\}$; $p = 0.1$ selected, applied after the single hidden layer, i.e., between the hidden-layer output and the pre-softmax logit computation)~\cite{srivastava2014}, Gaussian input noise ($\sigma_{\text{noise}} \in \{0.01, 0.05, 0.1\}$; $\sigma = 0.1$ selected, training-only), label smoothing ($\epsilon \in \{0.01, 0.05, 0.1\}$; $\epsilon = 0.01$ selected, applied to target labels during cross-entropy computation), and an Early Stopping condition (patience $\in \{3, 5, 7\}$ epochs; patience = 3 selected by minimum validation loss, fixed-budget fairness mode: the early-stopping run is allowed to complete the full gradient budget regardless, so the comparison is budget-matched)~\cite{prechelt1998}. All sweeps used a small 3-value grid and selected the setting with the lowest validation loss. The best combination uses Early Stopping (patience=3) + L2 ($\lambda = 10^{-3}$), selected from exhaustive testing of 26 combinations of 2+ regularizers based on minimum validation loss. This 2-regularizer combination outperformed all other tested combinations including those with 3, 4, or 5 regularizers.
 
 \subsection{Results}
 
@@ -367,7 +367,7 @@ The most surprising result was that Randomized Optimization, despite being deriv
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section*{AI USE STATEMENT}
 
-Once done with the preliminary draft, I used Claude Sonnet 4.5 to proofread and correct grammar, verify citation formatting, and make text concise where it was too verbose. I used GitHub Copilot to assist with figure alignment in LaTeX and to generate boilerplate code and bug fixes for the experiments and EDA code in the VS Code editor. I reviewed, verified, and understand all assisted content, and all analysis, interpretations, and conclusions are my own.
+Once done with the preliminary draft, I used Claude Sonnet 4.6 to proofread and correct grammar, verify citation formatting, and make text concise where it was too verbose. I used GitHub Copilot to assist with figure alignment in LaTeX and to generate boilerplate code and bug fixes for the experiments and EDA code in the VS Code editor. I reviewed, verified, and understand all assisted content, and all analysis, interpretations, and conclusions are my own.
 
 \addtolength{\textheight}{-12cm}
 
@@ -377,17 +377,13 @@ Once done with the preliminary draft, I used Claude Sonnet 4.5 to proofread and 
 
 \begin{thebibliography}{99}
 
-\bibitem{kohavi1996} R.~Kohavi, ``Scaling up the accuracy of naive-Bayes classifiers: A decision-tree hybrid,'' in \emph{Proc. 2nd Int. Conf. Knowl. Discovery Data Mining (KDD)}, 1996, pp.~202--207.
+\bibitem{kingma2014} D.~P.~Kingma and J.~Ba, ``Adam: A method for stochastic optimization,'' in \emph{Proc. Int. Conf. Learn. Representations (ICLR)}, 2015. [Online]. Available: \url{https://arxiv.org/abs/1412.6980}
 
-\bibitem{cortez2009} P.~Cortez, A.~Cerdeira, F.~Almeida, T.~Matos, and J.~Reis, ``Modeling wine preferences by data mining from physicochemical properties,'' \emph{Decision Support Syst.}, vol.~47, no.~4, pp.~547--553, 2009.
+\bibitem{loshchilov2017} I.~Loshchilov and F.~Hutter, ``Decoupled weight decay regularization,'' in \emph{Proc. Int. Conf. Learn. Representations (ICLR)}, 2019. [Online]. Available: \url{https://arxiv.org/abs/1711.05101}
 
-\bibitem{kingma2014} D.~P.~Kingma and J.~Ba, ``Adam: A method for stochastic optimization,'' in \emph{Proc. Int. Conf. Learn. Representations (ICLR)}, 2015.
+\bibitem{srivastava2014} N.~Srivastava, G.~Hinton, A.~Krizhevsky, I.~Sutskever, and R.~Salakhutdinov, ``Dropout: A simple way to prevent neural networks from overfitting,'' \emph{J. Mach. Learn. Res.}, vol.~15, no.~1, pp.~1929--1958, 2014. [Online]. Available: \url{https://jmlr.org/papers/v15/srivastava14a.html}
 
-\bibitem{loshchilov2017} I.~Loshchilov and F.~Hutter, ``Decoupled weight decay regularization,'' in \emph{Proc. Int. Conf. Learn. Representations (ICLR)}, 2019.
-
-\bibitem{srivastava2014} N.~Srivastava, G.~Hinton, A.~Krizhevsky, I.~Sutskever, and R.~Salakhutdinov, ``Dropout: A simple way to prevent neural networks from overfitting,'' \emph{J. Mach. Learn. Res.}, vol.~15, no.~1, pp.~1929--1958, 2014.
-
-\bibitem{prechelt1998} L.~Prechelt, ``Early stopping --- but when?'' in \emph{Neural Networks: Tricks of the Trade}, G.~B.~Orr and K.-R.~M\"{u}ller, Eds. Berlin, Germany: Springer, 1998, pp.~55--69.
+\bibitem{prechelt1998} L.~Prechelt, ``Early stopping --- but when?'' in \emph{Neural Networks: Tricks of the Trade}, G.~B.~Orr and K.-R.~M\"{u}ller, Eds. Berlin, Germany: Springer, 1998, pp.~55--69. [Online]. Available: \url{https://link.springer.com/chapter/10.1007/3-540-49430-8_3}
 
 \end{thebibliography}
 
